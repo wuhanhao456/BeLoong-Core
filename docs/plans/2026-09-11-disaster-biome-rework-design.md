@@ -100,3 +100,20 @@ BWG 的动物表按 `biomeswevegone:` key 注册，克隆后失效。两档做�
 1. **spawns 策略**：§2.3 的 A（统一基础名单）还是 B（逐群系精调）——影响工作量约一天
 2. `is_disaster` tag 文件放 core 还是留整合包（涉及「原版 + 本仓库 = 完美复现」纪律的边界，倾向随 core 走、整合包删除）
 3. TB 注入实测若走「摘除 tag」路线，`terrablender:overworld_regions` 的 `replace:true` 文件在 core 内还是整合包内需统一归属
+
+
+## 勘误 v3（2026-09-11 实测 log 后修正）
+
+**参数表不能做成独立注册项**（原 v2 方案 §T1d 作废）：
+
+- `MultiNoiseBiomeSourceParameterList.DIRECT_CODEC` = `Preset.CODEC.fieldOf("preset")` + `RegistryOps.retrieveGetter(BIOME)`；
+  `Preset.CODEC` 走 `ResourceLocation.CODEC.flatXmap`，`BY_NAME` 只有 `minecraft:overworld` / `minecraft:nether`。
+  → 该注册表的注册项**无法承载自定义 parameters**，只能是 `{"preset":"minecraft:overworld"}` 这种别名。
+  写 `{"parameters":[...]}` 会两个分支都报 `No key preset` → registry 加载失败 → 开世界黑屏（f6f19d6 后实测）。
+- 正确做法：`MultiNoiseBiomeSource.CODEC = Codec.mapEither(
+    Climate.ParameterList.codec(Biome.CODEC.fieldOf("biome")).fieldOf("biomes"),   # 内联分支，优先
+    MultiNoiseBiomeSourceParameterList.CODEC.fieldOf("preset"))`
+  → **7593 条参数表内联进 `dimension/disaster.json` 的 `generator.biome_source.biomes`**，删除独立注册项文件。
+- 条目结构（`Climate.ParameterPoint.CODEC` 7 键嵌在 `parameters` 下，`biome` 与其平级）：
+  `{"parameters":{"temperature":[lo,hi],"humidity":[..],"continentalness":[..],"erosion":[..],"depth":[..],"weirdness":[..],"offset":0.0},"biome":"beloong:disaster_xxx"}`
+- 生成脚本：`scripts/build_disaster_dimension.py`（取代 `build_disaster_preset.py`）。
