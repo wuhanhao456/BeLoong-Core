@@ -2,10 +2,10 @@
   "type": "beloong:disaster",
   "generator": {
     "type": "minecraft:noise",
-    "settings": "minecraft:overworld",
+    "settings": "beloong:disaster",
     "biome_source": {
       "type": "minecraft:multi_noise",
-      "preset": "minecraft:overworld"
+      "preset": "beloong:disaster"
     }
   }
 }
