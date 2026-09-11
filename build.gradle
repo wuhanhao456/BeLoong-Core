@@ -226,6 +226,10 @@ dependencies {
     compileOnly "curse.maven:legendary-monsters-944035:8715533"
     localRuntime "curse.maven:legendary-monsters-944035:8715533"
 
+    // Explorer's Compass — 可选依赖（探险罗盘按维度过滤可搜索结构）
+    compileOnly "curse.maven:explorers-compass-491794:7892943"
+    localRuntime "curse.maven:explorers-compass-491794:7892943"
+
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
