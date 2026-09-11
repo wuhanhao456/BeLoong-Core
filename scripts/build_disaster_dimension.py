@@ -25,8 +25,11 @@
 - 16 个自有克隆群系（海洋9/河2/洞3/beach2）: 气候点原样继承原版对应群系, 仅改 id 为 beloong:disaster_同名
 - 其余 37 个原版地表群系: 按气候等价原则映射到 beloong:disaster_BWG 群系（VANILLA_TO_BWG）
 - 未映射到的 BWG 群系不出现在参数表（纯点替换, 不新增点位）
+- 7 个未接线克隆（方案甲, SPLIT_TABLE）: 按切分轴（weirdness）把宿主点位升序整点均匀分组,
+  各参与方分得一段; 只改 biome 归属 id, 参数原样保留, 总点数不变
 """
 import json, os, sys
+from collections import Counter
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(REPO, 'build/extracted/overworld-parameters-1.21.1.json')
@@ -83,6 +86,77 @@ VANILLA_TO_BWG = {
     'mushroom_fields': 'pale_bog',
 }
 
+# 7 个未接线克隆的切分方案（方案甲, wuhanhao 2026-09-11 确认）。
+# host     = 被切宿主的克隆 id 后缀（须已在 SELF_CLONES / VANILLA_TO_BWG 中被接线）
+# axis     = 切分轴（本次全部为 'weirdness'）
+# outputs  = 均分后各段归属的 id 后缀, 按切分轴升序【连续】分配;
+#            第 0 项即宿主自己（保留一段, 故宿主切分后仍有点位）
+SPLIT_TABLE = [
+    {'host': 'ebony_woods',         'axis': 'weirdness',
+     'outputs': ['ebony_woods', 'forgotten_forest', 'weeping_witch_forest']},
+    {'host': 'cypress_wetlands',    'axis': 'weirdness',
+     'outputs': ['cypress_wetlands', 'cypress_swamplands']},
+    {'host': 'maple_taiga',         'axis': 'weirdness',
+     'outputs': ['maple_taiga', 'cika_woods']},
+    {'host': 'rose_fields',         'axis': 'weirdness',
+     'outputs': ['rose_fields', 'pumpkin_valley']},
+    {'host': 'windswept_desert',    'axis': 'weirdness',
+     'outputs': ['windswept_desert', 'dead_sea']},
+    {'host': 'tropical_rainforest', 'axis': 'weirdness',
+     'outputs': ['tropical_rainforest', 'lush_stacks']},
+]
+SPLIT_NEW_CLONES = ['forgotten_forest', 'weeping_witch_forest', 'cypress_swamplands',
+                    'cika_woods', 'pumpkin_valley', 'dead_sea', 'lush_stacks']
+
+
+def _clone_id(entry):
+    return entry['biome'].split(':')[1][len('disaster_'):]
+
+
+def _point_key(entry):
+    """单点唯一键: biome + 6 气候轴区间 + offset（即"7 轴参数"）。"""
+    p = entry['parameters']
+    return (entry['biome'],) + tuple(tuple(p[ax]) for ax in AXES) + (float(p['offset']),)
+
+
+def apply_splits(entries):
+    """方案甲: 按切分轴整点均匀分组。
+
+    宿主点位按 axis 值（weirdness 为 [lo,hi] 区间, 以 (lo,hi) 为序）升序排序后,
+    均分成 N 段 —— 每段【连续、非空、互不重叠】且整点分配（不切单个点的区间）;
+    第 i 段整体改归属 outputs[i]。切出的组保留原点全部参数, 只改 biome 归属 id。
+    返回统计 dict: {host: {'axis':..,'before':n,'after':{id:cnt}}}
+    """
+    stats = {}
+    for spec in SPLIT_TABLE:
+        host, axis, outs = spec['host'], spec['axis'], spec['outputs']
+        n = len(outs)
+        assert axis in AXES, spec
+        assert n >= 2 and outs[0] == host, spec
+        assert len(set(outs)) == n, f'duplicate outputs in {spec}'
+
+        grp = [e for e in entries if _clone_id(e) == host]
+        assert grp, f'split host not wired into parameter table: {host}'
+        before = len(grp)
+        # 按切分轴升序（区间用 (lo,hi) 排序）; 并列项稳定排序保持原相对次序
+        grp.sort(key=lambda e: tuple(e['parameters'][axis]))
+        # 整点均匀分组, 余数分给靠前的段
+        base, rem = divmod(before, n)
+        segs, cursor = [], 0
+        for i in range(n):
+            size = base + (1 if i < rem else 0)
+            segs.append(grp[cursor:cursor + size])
+            cursor += size
+        assert cursor == before, (host, [len(s) for s in segs])
+        assert all(segs), f'empty segment after split: {host} -> {[len(s) for s in segs]}'
+        # 逐段改归属（参数原样保留）
+        for out, seg in zip(outs, segs):
+            for e in seg:
+                e['biome'] = f'beloong:disaster_{out}'
+        stats[host] = {'axis': axis, 'before': before,
+                       'after': {out: len(seg) for out, seg in zip(outs, segs)}}
+    return entries, stats
+
 
 def build_entries():
     params = json.load(open(SRC))['parameters']
@@ -111,10 +185,23 @@ def main():
     if misses:
         print('UNMAPPED vanilla biomes (climate points dropped):', misses, file=sys.stderr)
 
+    # 方案甲: 给 7 个未接线克隆切分宿主参数表
+    entries, split_stats = apply_splits(entries)
+
+    # 切分后单点单归属: 全表 (biome + 7 轴参数) 组合键必须唯一
+    keys = [_point_key(e) for e in entries]
+    dup = [k for k, c in Counter(keys).items() if c > 1]
+    assert not dup, f'duplicate (biome+params) points after split: {dup[:3]}'
+
+    # 7 个新克隆必须全部接线
+    wired = {_clone_id(e) for e in entries}
+    unwired = [c for c in SPLIT_NEW_CLONES if c not in wired]
+    assert not unwired, f'new clones not wired after split: {unwired}'
+
     biome_dir = os.path.join(REPO, 'src/main/resources/data/beloong/worldgen/biome')
     have = {f[len('disaster_'):-5] for f in os.listdir(biome_dir)
             if f.startswith('disaster_') and f.endswith('.json')}
-    used = {e['biome'].split(':')[1][len('disaster_'):] for e in entries}
+    used = {_clone_id(e) for e in entries}
     missing = used - have
     if missing:
         print('ERROR: biome_source references biomes without clone files:', sorted(missing), file=sys.stderr)
@@ -146,12 +233,40 @@ def main():
     assert len(got) == len(entries), (len(got), len(entries))
     assert all(set(e['parameters']) == set(AXES) | {'offset'} for e in got)
     assert not any(e['biome'].startswith('minecraft:') for e in got)
+
+    # --- 切分相关自检（方案甲）---
+    final_counts = Counter(_clone_id(e) for e in got)
+    total_points = len(got)
+    assert total_points == len(params) == 7593, (total_points, len(params))
+    # 每个新克隆点数 >= 5
+    for c in SPLIT_NEW_CLONES:
+        assert final_counts[c] >= 5, f'new clone below 5 points: {c}={final_counts[c]}'
+    # 每个被切宿主切分后点数 >= 5
+    for spec in SPLIT_TABLE:
+        assert final_counts[spec['host']] >= 5, \
+            f'host below 5 points after split: {spec["host"]}={final_counts[spec["host"]]}'
+    # 输出文件里 (biome + 7 轴参数) 组合键无重复
+    out_keys = [_point_key(e) for e in got]
+    out_dup = [k for k, c in Counter(out_keys).items() if c > 1]
+    assert not out_dup, f'duplicate (biome+params) in written file: {out_dup[:3]}'
+    assert len(set(out_keys)) == total_points, 'unique-key count != point count'
+
     used_biomes = sorted({e['biome'] for e in got})
     print(f'entries: {len(entries)} (from {len(params)})')
     print(f'biomes referenced: {len(used_biomes)}')
     print(f'unmapped dropped: {sum(misses.values())} points / {len(misses)} vanilla biomes' if misses else 'unmapped: none')
+
+    print('--- split stats (方案甲, axis=weirdness) ---')
+    for spec in SPLIT_TABLE:
+        host = spec['host']
+        st = split_stats[host]
+        segs = ' | '.join(f'{k}={v}' for k, v in st['after'].items())
+        print(f'  {host}: {st["before"]} -> {final_counts[host]}  [{segs}]')
+    print('  new clones:', ', '.join(f'{c}={final_counts[c]}' for c in SPLIT_NEW_CLONES))
+
     print(f'written: {OUT}  ({os.path.getsize(OUT)/1024/1024:.2f} MB)')
     print('self-check: parse OK, range OK, clone-coverage OK, no minecraft: refs, no preset key')
+    print('split self-check: total=7593 OK, 58 biomes OK, new-clone>=5 OK, host>=5 OK, unique-point-key OK')
 
 
 if __name__ == '__main__':
