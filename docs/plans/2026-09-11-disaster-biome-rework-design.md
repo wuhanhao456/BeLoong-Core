@@ -188,7 +188,7 @@ com.chaosthedude.explorerscompass.gui.StructureSearchList.renderWidget(Structure
 处置：**删除 `StructureUtilsMixin`**（连同 `beloong.mixins.json` 注册与 `build.gradle` 的 explorers-compass 可选依赖）。
 
 - 该过滤器（commit `4211264`）当时是为了消灭「天灾专属结构在主世界显示天灾维度」的假显示；但维度栏本来就是罗盘自己算的：`getGeneratingDimensionKeys` = `structure.biomes()` ∩ 各 `ServerLevel` 的 `BiomeSource.possibleBiomes()`，**口径与我们要的完全一致**。假显示的真源头是 TB 注入链（把 BWG 塞进天灾维度、让 `possibleBiomes` 里真的出现了 BWG），该链已由第 2 条退役 —— 过滤器因此既多余，又是卡死的直接原因。
-- 保留：TB tag 清空（`overworld_regions = []`）、`CloneParameterListMixin` 删除、整合包侧 `is_disaster.json` 维持双来源。
+- 保留：`CloneParameterListMixin` 删除、整合包侧 `is_disaster.json` 维持双来源。TB tag 的写法在第 6 节进一步修正为显式 `[minecraft:overworld]`（原先的 `[]` 会把主世界一起摘掉）。
 
 验证：`bash gradlew build --console=plain` → BUILD SUCCESSFUL；产物 `build/libs/beloong-0.8.2.jar`（12,675,971 字节，sha256 `c4a655a2…`）内 `beloong.mixins.json` 无 `explorerscompass` 条目、无 `StructureUtilsMixin` 类（mixins 28 + client 7）。
 
