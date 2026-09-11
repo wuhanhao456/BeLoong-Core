@@ -120,7 +120,7 @@ BWG 的动物表按 `biomeswevegone:` key 注册，克隆后失效。两档做�
 
 ## 实施记录（2026-09-11 落地，Wu）
 
-**0. 机制勘误（2026-09-11 二次核实，覆盖本文档前文与首版记录的判断）**
+**0. 机制勘误（2026-09-11 二次核实）——本条结论已作废，同日第三次核对后推翻；正确结论见第 6 节**
 
 1.21.1 的 tag 合并实际行为（`MultiPackResourceManager` + `FallbackResourceManager.getResourceStack` + `TagLoader.load` 逐处核对）：
 `getResource`/`getResourceStack` 都从 `fallbacks` 末尾往前取，**优先级 = 列表靠后 = 先被读到**，所以 `getResourceStack` 返回的顺序是**高优先级在前**。
@@ -133,12 +133,12 @@ BWG 的动物表按 `biomeswevegone:` key 注册，克隆后失效。两档做�
 | 1 | `beloong`（mod） | 高 | `replace: true` + `["beloong:disaster"]` |
 | 2 | `terrablender`（前置 mod） | 低 | `replace: false` + `["minecraft:overworld"]` |
 
-→ 合并结果 = `{beloong:disaster, minecraft:overworld}`。**猪排 38ae579 想把主世界从 tag 里摘掉，实际没摘掉**（他的 replace 只作用于比自己更高优先级的条目，TB 自己的条目在他之后照样 append）。所以：
+→ 合并结果 = **`{beloong:disaster}`**（猪排的 `replace` 生效，TB 自己的条目被一并清掉）。详见第 6 节：`TagLoader` 走的是 `listMatchingResourceStacks` → `FallbackResourceManager.listResourceStacks`，那份列表是**升序优先级**（低→高），所以高优先级文件的 `replace: true` 清掉的是**全部更低优先级条目**。因此：
 
-- **主世界一直有 BWG / VanillaBackport 的 TB 区域群系**（`主世界会生成` 是对的）；
-- 天灾维度同时也有（档 1 的口子）。
+- **主世界从 2026-06-02（38ae579）起就没有 TB 区域注入了**——BWG / VanillaBackport 的群系只在 6 月之前生成的旧区块里还在，新区块不再产；
+- 天灾维度反而拿到了 BWG（档 1 的口子，即「假显示」的真源头）。
 
-首版记录里「主世界本就不含 BWG」的推断作废。
+首版记录里「主世界本就不含 BWG」的推断作废；二次核实的「主世界仍有 BWG」同样作废（见第 6 节）。
 
 **1. `is_disaster` 维持双来源（不改）**
 - core：`replace: true` + 71 个 `beloong:disaster_*`（高优先级）；
@@ -192,4 +192,16 @@ com.chaosthedude.explorerscompass.gui.StructureSearchList.renderWidget(Structure
 
 验证：`bash gradlew build --console=plain` → BUILD SUCCESSFUL；产物 `build/libs/beloong-0.8.2.jar`（12,675,971 字节，sha256 `c4a655a2…`）内 `beloong.mixins.json` 无 `explorerscompass` 条目、无 `StructureUtilsMixin` 类（mixins 28 + client 7）。
 
+**6. BWG 村庄无处生成：TB `overworld_regions` 被整体顶掉（2026-09-11 第三波）**
 
+现象：`biomeswevegone` 的 6 个村庄（`village/forgotten`＝遗忘村庄、`salem`、`skyris`、`swamp`、`red_rock`、`pumpkin_patch`）在任何维度都没有可生成群系。它们各自的 `biomes` 白名单是 `#biomeswevegone:has_structure/village_*`，展开后分别是单个/两个 BWG 群系（forgotten → `biomeswevegone:forgotten_forest`），**全部只认 BWG 群系**。
+
+机制（三处一手证据）：
+
+1. **tag 合并顺序**：`TagLoader.load` 走的是 `FileToIdConverter.listMatchingResourceStacks` → `MultiPackResourceManager.listResourceStacks` → `FallbackResourceManager.listResourceStacks`，而后者是 `for (PackEntry e : this.fallbacks)` **正序遍历**（`push` 用 `add` 追加；只有 `getResource`/`getResourceStack` 才是倒序取第一个）⇒ 那份 `List<Resource>` 是**升序优先级**，所以高优先级文件的 `replace: true` 清掉的是**全部更低优先级条目**。第 0 节二次核实的结论（「高优先级在前、replace 只清比自己更高的」）作废——那条错把 `getResourceStack` 的顺序当成了 tag 加载顺序。
+2. **实际优先级**：`overworld_regions` 全包只有两个提供者——TB 自己的 `{replace:false, "minecraft:overworld"}` 和 beloong 的 `{replace:true, [...]}`。玩家日志里的 pack 列表（升序）中 `mod/terrablender` 位于 `mod/beloong` **之前**（依赖在前、依赖方在后 ⇒ 后者优先级更高）⇒ 合并结果 = **beloong 的 values 单独生效**：猪排 `38ae579` 之后是 `{beloong:disaster}`，本仓库上一版（`86a0104`）是 `{}`。
+3. **消费方**：TB `LevelUtils.getRegionTypeForDimension(Holder<DimensionType>)` = 命中 `NETHER_REGIONS` → NETHER、命中 `OVERWORLD_REGIONS` → OVERWORLD、否则 **null**；`initializeBiomes` 拿到 null 直接 `return` ⇒ **没被列进 tag 的维度类型一律不做区域注入**。于是主世界（dimension type `minecraft:overworld`）自 2026-06-02 起就没有 BWG/VB 区域 ⇒ BWG 群系只在 6 月之前生成的旧区块里存在，新区块不再产 ⇒ BWG 村庄（以及所有白名单只含 BWG 群系的结构）失去生成地。这也解释了罗盘为什么对它们「一个维度都不显示」。
+
+改法：core 的该 tag 显式写 `{"replace": true, "values": ["minecraft:overworld"]}` —— 等于 TB 上游默认，主世界恢复 BWG/VB 注入；`beloong:disaster` 依旧不在列表里，天灾维度继续保持无 BWG（第 2 节目标不受影响）。
+
+注意：旧区块里已生成的 BWG 群系不会回滚，恢复只在**新区块**生效。
