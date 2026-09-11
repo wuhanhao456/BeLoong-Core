@@ -120,21 +120,46 @@ BWG 的动物表按 `biomeswevegone:` key 注册，克隆后失效。两档做�
 
 ## 实施记录（2026-09-11 落地，Wu）
 
-**1. §5 待定项 2 按「随 core 走」执行**
-- `beloong:is_disaster` 唯一来源 = BeLoong-Core（`replace: true` + 71 个 `beloong:disaster_*`）。
-- 整合包 `kubejs/data/beloong/tags/worldgen/biome/is_disaster.json`（55 个 `biomeswevegone:*` 原 id，PorkChop_ZLG 2026-06-04 遗留）已删除。删除前它会以 kubejs 高优先级并入 tag，使 52 个天灾结构白名单里带上 BWG 原 id。
+**0. 机制勘误（2026-09-11 二次核实，覆盖本文档前文与首版记录的判断）**
 
-**2. §2.4 TB 退路选定「退役」**
-- `data/terrablender/tags/dimension_type/overworld_regions.json` → `{"replace": true, "values": []}`。
-- 依据：猪排 2026-06-02（38ae579「天灾维度正常，但是主世界还有」）把该 tag 由 `replace:false` 改 `true`，目的就是把 BWG 从主世界挪进天灾维度——主世界本就不含 BWG。档 2 用克隆接管天灾维度后，这条注入链唯一作用变成「把 55 个 BWG 群系重新塞回天灾维度」，等于重开 §2.4 说的口子：白名单含 BWG 的 212 个结构会继续在天灾维度生成，罗盘也会如实显示天灾维度。
-- `CloneParameterListMixin` 一并删除（它保护的「共享 ParameterList 被 TB 初始化污染」场景已不存在，留着反而是 TB 版本变动的脆弱点）。
-- 保留常量：参数表 7593 条 / 51 个去重群系 / 71 个克隆文件，未变。
+1.21.1 的 tag 合并实际行为（`MultiPackResourceManager` + `FallbackResourceManager.getResourceStack` + `TagLoader.load` 逐处核对）：
+`getResource`/`getResourceStack` 都从 `fallbacks` 末尾往前取，**优先级 = 列表靠后 = 先被读到**，所以 `getResourceStack` 返回的顺序是**高优先级在前**。
+`TagLoader.load` 按这个顺序累加，遇到 `"replace": true` 时 `list.clear()` —— **清掉的是「优先比自己高」的那些条目**，而**优先级更低的文件在它之后继续 append**。
 
-**3. 校清单**
-- 静态解析（527 结构，口径＝白名单 ∩ 维度真实群系）：52 个会显示天灾维度（cataclysm 8 / fdbosses 3 / netherman 6 / mss 35）；212 个含 BWG 白名单但天灾维度零交集；20 个克隆群系未进参数表（脚本映射规则内，暂留）。
-- 复核脚本与产物：`~/archive/beloong_dim_audit.py`、`beloong_structure_dimension_audit.{md,html}`。
+由此，`terrablender:tags/dimension_type/overworld_regions` 的实际结果是：
+
+| 顺序 | 文件 | 优先级 | 内容 |
+|---|---|---|---|
+| 1 | `beloong`（mod） | 高 | `replace: true` + `["beloong:disaster"]` |
+| 2 | `terrablender`（前置 mod） | 低 | `replace: false` + `["minecraft:overworld"]` |
+
+→ 合并结果 = `{beloong:disaster, minecraft:overworld}`。**猪排 38ae579 想把主世界从 tag 里摘掉，实际没摘掉**（他的 replace 只作用于比自己更高优先级的条目，TB 自己的条目在他之后照样 append）。所以：
+
+- **主世界一直有 BWG / VanillaBackport 的 TB 区域群系**（`主世界会生成` 是对的）；
+- 天灾维度同时也有（档 1 的口子）。
+
+首版记录里「主世界本就不含 BWG」的推断作废。
+
+**1. `is_disaster` 维持双来源（不改）**
+- core：`replace: true` + 71 个 `beloong:disaster_*`（高优先级）；
+- 整合包：`kubejs/data/beloong/tags/worldgen/biome/is_disaster.json`（55 个 `biomeswevegone:*`，低优先级、无 replace，追加）。
+- tag 语义 = 「算作天灾系的群系」：`beloong:disaster_*` 覆盖天灾维度，`biomeswevegone:*` 覆盖主世界里的 BWG 区域。**两者都保留**，52 个天灾结构因此既能刷在天灾维度（克隆），也能刷在主世界的 BWG 区域。
+- 首版曾删除整合包侧文件，导致这 52 个结构在主世界那一栏消失（`该显示的不显示了`），已回滚。
+
+**2. §2.4 TB 退路选定「退役」（仅对天灾维度生效）**
+- `data/terrablender/tags/dimension_type/overworld_regions.json` → `{"replace": true, "values": []}`（core，最高优先级）。
+- 合并结果变成 `{minecraft:overworld}`：**主世界照旧**，**天灾维度不再被注入 BWG/VB 区域**，维度内只剩 51 个 beloong 克隆（参数表 7593 条）。
+- 目的：不再让白名单含 BWG 的 212 个结构（含 BWG 自家 18 个）继续在天灾维度生成；这与「档 2 完全体」一致。
+- `CloneParameterListMixin` 一并删除（其保护的共享 ParameterList 场景已不存在）。
+
+**3. 校清单（口径＝白名单 ∩ 维度真实群系）**
+- 会显示天灾维度：52（cataclysm 8 / fdbosses 3 / netherman 6 / mss 35）；其中 49 个同时显示主世界（白名单里有 BWG 原 id）。
+- 含 BWG 白名单、天灾维度零交集：212。
+- 20 个克隆群系未进参数表（映射规则内，暂留）。
+- 工具与产物：`~/archive/beloong_dim_audit.py`、`beloong_structure_dimension_audit.{md,html}`。
 
 **4. 待办**
-- 整合包其余 BWG 分类 tag 尚未随克隆迁移：`is_sea`、`is_desert`、`is_snowy`、`is_nether`、`is_end`、`ds_aether_addon/.../cherryskyland`。
-- 打包时必须带上重建后的 core jar（0.8.2 之后），否则 tag 失去提供方。
+- 整合包其余 BWG 分类 tag 未动：`is_sea`、`is_desert`、`is_snowy`、`is_nether`、`is_end`、`ds_aether_addon/.../cherryskyland`（它们同样是「BWG 区域 + 克隆」双份语义，是否随克隆补条目由 wuhanhao 定）。
+- 打包时必须带上重建后的 core jar（0.8.2 之后）。
+
 
