@@ -2,7 +2,7 @@
 """T1d: 生成 beloong:disaster 多维噪声参数表（命运空间完全体）。
 
 输入: build/extracted/overworld-parameters-1.21.1.json (7593 条原版条目, 运行时反射提取, 见 extraction-report.md)
-输出: src/main/resources/data/beloong/multi_noise_biome_source_parameter_list/disaster.json
+输出: src/main/resources/data/beloong/worldgen/multi_noise_biome_source_parameter_list/disaster.json
       顶层格式 {"parameters": [point...]}（1.21.1 codec 实证: Climate$ParameterList codec 为 pointCodec.fieldOf("parameters") 包装,
       已反混淆 def$c/def$d 字节码核证; 每个 point = {biome, temperature, humidity, continentalness, erosion, depth, weirdness, offset}）
 
@@ -15,7 +15,7 @@ import json, os, sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(REPO, 'build/extracted/overworld-parameters-1.21.1.json')
-OUT = os.path.join(REPO, 'src/main/resources/data/beloong/multi_noise_biome_source_parameter_list/disaster.json')
+OUT = os.path.join(REPO, 'src/main/resources/data/beloong/worldgen/multi_noise_biome_source_parameter_list/disaster.json')
 
 # 16 个自有克隆（1:1 改名）
 SELF_CLONES = [
