@@ -37,7 +37,6 @@
     "dragonsurvival.ProjectileDamageEffectMixin",
     "betterendisland.DragonSummonMixin",
     "betterendisland.ExitPortalUtilsMixin",
-    "explorerscompass.StructureUtilsMixin",
     "legendarymonsters.AnnihilationPursuerDamageCapMixin",
     "mowziesmobs.EntityWroughtnautMaceMixin",
     "mowziesmobs.EntitySculptorCanFlyMixin"

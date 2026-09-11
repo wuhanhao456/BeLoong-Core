@@ -162,4 +162,34 @@ BWG 的动物表按 `biomeswevegone:` key 注册，克隆后失效。两档做�
 - 整合包其余 BWG 分类 tag 未动：`is_sea`、`is_desert`、`is_snowy`、`is_nether`、`is_end`、`ds_aether_addon/.../cherryskyland`（它们同样是「BWG 区域 + 克隆」双份语义，是否随克隆补条目由 wuhanhao 定）。
 - 打包时必须带上重建后的 core jar（0.8.2 之后）。
 
+**5. 罗盘跨维度卡死：根因与拆除（2026-09-11 第二波）**
+
+现象：在天灾维度打开罗盘→关闭→回主世界→再打开罗盘，**卡死**；反方向同样。崩溃栈头部：
+
+```
+com.chaosthedude.explorerscompass.util.StructureUtils.getPrettyStructureName(StructureUtils.java:189)
+com.chaosthedude.explorerscompass.gui.StructureSearchEntry.render(StructureSearchEntry.java:73)
+com.chaosthedude.explorerscompass.gui.StructureSearchList.renderWidget(StructureSearchList.java:63)
+```
+
+定位（全部来自 `ExplorersCompass-1.21.1-3.4.0-neoforge.jar` 官方原件，sha1 `9f62af34…` 与 Modrinth 1.21.1-3.4.0 一致，未被改动）：
+
+1. `getPrettyStructureName` 的行号表：`line 189 → offset 0`，即方法第一条指令 `aload_0; invokevirtual ResourceLocation.toString()`。**抛点在方法最开头 ⇒ 入参 `key == null`。**
+2. `StructureSearchEntry.render` 行号表：`line 73 → offset 230`，该段唯一调用 `getPrettyStructureName` 的指令在 offset 258，实参是
+   `ExplorersCompass.structureKeysToTypeKeys.get(this.structureKey)`（「分组」前缀行，`string.explorerscompass.group`）。
+   ⇒ **`structureKeysToTypeKeys` 里查不到这条结构的 key**。
+3. 罗盘自身的不变量：`SyncPacket.write` 遍历 `allowedStructureKeys`，每条写 `(key, dims, typeKey, xp)`；`read` 在**同一个循环**里同时填 `allowedStructureKeys` 与 `structureKeysToTypeKeys`。
+   ⇒ **客户端 map 的键集合 ≡ 该次同步的 allowed 列表**（不是全注册表）。
+4. 屏幕侧：`ExplorersCompassScreen.tick()` 把静态 `allowedStructureKeys` **拷贝**进 `this.allowedStructureKeys` 并用它构建列表项；而渲染时读的是**静态** map。
+   ⇒ 只要两次同步的 allowed 集合不同，就会出现「屏幕里是上一次同步的条目 + 静态 map 已换成这一次」→ 查不到 → null → 渲染线程 NPE（游戏卡住/崩溃）。
+5. 为什么上游 3.4.0 不炸：原版 `getAllowedStructureKeys` **与维度无关**（返回全量注册表），每次同步键集合都一样，旧条目永远查得到。**是本仓库的维度过滤器让 allowed 集合随维度变化，才打开了这个窗口。**
+6. 为什么第一次打开没事、切维度后第二次必炸：第一次打开时客户端静态量尚未同步（列表为空 → 没有条目可渲染），之后的同步两边同源；切换维度后屏幕带着上一维度的条目，新同步一到达就撞上。
+
+处置：**删除 `StructureUtilsMixin`**（连同 `beloong.mixins.json` 注册与 `build.gradle` 的 explorers-compass 可选依赖）。
+
+- 该过滤器（commit `4211264`）当时是为了消灭「天灾专属结构在主世界显示天灾维度」的假显示；但维度栏本来就是罗盘自己算的：`getGeneratingDimensionKeys` = `structure.biomes()` ∩ 各 `ServerLevel` 的 `BiomeSource.possibleBiomes()`，**口径与我们要的完全一致**。假显示的真源头是 TB 注入链（把 BWG 塞进天灾维度、让 `possibleBiomes` 里真的出现了 BWG），该链已由第 2 条退役 —— 过滤器因此既多余，又是卡死的直接原因。
+- 保留：TB tag 清空（`overworld_regions = []`）、`CloneParameterListMixin` 删除、整合包侧 `is_disaster.json` 维持双来源。
+
+验证：`bash gradlew build --console=plain` → BUILD SUCCESSFUL；产物 `build/libs/beloong-0.8.2.jar`（12,675,971 字节，sha256 `c4a655a2…`）内 `beloong.mixins.json` 无 `explorerscompass` 条目、无 `StructureUtilsMixin` 类（mixins 28 + client 7）。
+
 
