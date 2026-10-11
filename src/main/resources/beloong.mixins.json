@@ -3,6 +3,7 @@
   "package": "com.zonlong.beloong.mixin",
   "refmap": "beloong.refmap.json",
   "client": [
+    "AsteorBarHealthFixMixin",
     "dragonsurvival.ClientFlightHandlerMixin",
     "fdbosses.BossClientEventsMixin",
     "FSweepButtonControlMixin"

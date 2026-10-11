@@ -1,3 +1,5 @@
+> 2026-10-11 状态修订：本页保留原 HUD 缓存恢复方案的历史设计。现行代码沿用原类与原 Mixin 配置，改为当前玩家最新服务器血量包恢复，并合入成长数字过滤；见 [单类修订](../../fixes/2026-10-11-dimension-health-sync.md)。
+
 # Fix: AsteorBar Health Display After Dimension Change (Mixin v2)
 
 ## Problem

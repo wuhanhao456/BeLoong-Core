@@ -316,6 +316,9 @@ dependencies {
 
 }
 
+// 单类 Mixin 的测试需要解析其方法签名中的 Minecraft 类型，复用开发编译类路径。
+sourceSets.test.runtimeClasspath += sourceSets.main.compileClasspath
+
 // This block of code expands all declared replace properties in the specified resource targets.
 // A missing property will result in an error. Properties are expanded using ${} Groovy notation.
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

@@ -1,62 +1,22 @@
-# Growing dragons and Health Bars healing numbers
+# 龙成长产生的 Health Bars 回血数字
 
-Dragon Survival 2.0.71 recalculates health in `DSModifiers.updateGrowthModifiers`
-as `newMaxHealth * oldHealth / oldMaxHealth`. Growth therefore increases health
-even when a dragon remains at the same health percentage. Health Bars 21.1.0
-interprets every increase as healing and uses `ceil(abs(delta))`, turning tiny
-growth increments into repeated green `+1` particles.
+Dragon Survival 2.0.71 在成长更新中按新旧上限比例重新计算当前血量。
+因此即使血量百分比不变，也会出现微小绝对增长；Health Bars 21.1.0 将它作为治疗，
+通过向上取整产生重复绿色 `+1` 数字。
 
-The optional client compatibility subtracts proportional max-health changes from
-the number shown only when the dragon's growth value also changes. Equipment or
-other max-health changes without growth keep their original health deltas.
-A fixed two-client-tick window tolerates health, growth and attribute
-packets arriving separately; continuous growth cannot indefinitely extend it.
-Ordinary healing and damage with unchanged maximum health remain separate.
-During a growth/maximum-health transition the number represents the net damage/healing
-over that window. Changes below four health ULPs are treated as float noise.
-The health value and bar animation are not modified. The hook is scoped to real
-dragon players, resets on entity/world changes, and is enabled whenever Health
-Bars is installed. Version strings are not checked. Missing Health Bars creates
-no dependency. The hook still expects `HealthTracker.tick(LivingEntity)` and the
-private `lastHealthDelta` field; future API changes require adapting the hook.
+本次保持 fork 的成长数字过滤能力，将实现合入原有 `AsteorBarHealthFixMixin`，
+只使用原 `beloong.mixins.json`。不保留新增 Health Bars Mixin、插件、独立配置或生产辅助类。
+详细机制、跨维度 `setHealth` 恢复及真实验收见
+[单类修订](2026-10-11-dimension-health-sync.md)和
+[本轮验收](../reviews/2026-10-11-single-class-health-validation.md)。
 
-The former `AsteorBarHealthFixMixin` is removed. It inferred health from a previous
-entity, counted render calls as ticks and wrote cached health from HUD rendering.
-The HUD now reads the current entity's health normally; a server health-sync
-problem must not be repaired by restoring a previous entity's cached health.
-This supersedes the old AsteorBar freeze/write-back design in `docs/superpowers/`.
+过滤仅对龙玩家作用：成长与上限一起变化时扣除同比例增长，普通治疗、伤害和不伴随成长的上限变化保留。
+固定两客户端 tick 窗口容纳相邻同步，普通相反变化不会被净额抵消；四个血量 ULP 内的浮点噪声忽略。
+现行实现替换公开数字 getter 的返回值，不改动画字段，也不以写血量抑制成长。
 
-## Verification
+原作者的 HUD 帧缓存方案作为历史设计及原样恢复对照保留。
+fork 曾删除它；现行代码恢复原类，并使用当前玩家最新服务器包调用 `setHealth` 修正包序钳制。
 
-Run `gradlew test build`. The unit tests cover full/partial health growth, both
-packet orders separated by 0–2 ticks, real damage/healing during growth, fractional
-healing, opposing ordinary changes, float noise, shrinking, death, duplicate
-ticks and entity/world resets. These tests do not establish in-game performance.
-
-### Build result on 2026-10-10
-
-All **37** JUnit cases passed, and `test build` completed using JDK 21 and the
-current client's NeoForge **21.1.248**, Dragon Survival **2.0.71** and GeckoLib
-**4.9.3** dependencies. Health Bars is absent from the compile classpath; the
-optional hook uses a string target and `@Pseudo` instead of linking its classes.
-The installed Health Bars 21.1.0 `tick(LivingEntity)` method and private
-`lastHealthDelta` field were checked against its bytecode.
-
-The normal NeoForm Minecraft recompilation failed in existing `package-info`
-sources before compiling the mod. This build recovered the exact cached
-NeoForge 21.1.248 mapped SDK after checking its version metadata and SHA-256,
-and skipped only `createMinecraftArtifacts`. A local init script moved build
-outputs to an ASCII path after Gradle's test worker could not load classes from
-the Chinese workspace path. The repository's default NeoForge version was not
-changed. The produced jar requires NeoForge 21.1.248 or later.
-
-Actual client startup, the optional-mod presence/absence cases, combat,
-dimension changes, respawn and visual/performance checks remain **unverified**.
-The unit reset tests simulate entity changes; they do not launch a game.
-Packet separation beyond two ticks and other max-health changes simultaneous
-with growth are not covered by the filter's proportional-change assumption.
-
-On a client, compare the same scene before/after, first pausing natural growth to
-confirm the cause. Check idle growing dragons, combat, dimension changes and
-respawn, both with and without Health Bars. Record actual frame times and a new
-spark profile. Do not infer an FPS improvement from a CPU sampling percentage.
+2026-10-10 的 37 项单元测试与 2026-10-11 旧补丁的 r03/r06 实机结果属于各自历史版本。
+本次 54 项测试直接覆盖合并后的生产类，实机结果另行记录，不能沿用旧报告宣称新版本已经通过。
+包间隔超过两 tick、其他上限变化与成长同时发生、真实战斗的全部组合仍有适用边界。

@@ -1,5 +1,6 @@
 package com.zonlong.beloong.client.health;
 
+import com.zonlong.beloong.mixin.AsteorBarHealthFixMixin;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -8,6 +9,16 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class GrowthHealthDeltaTrackerTest {
+    private static final class GrowthHealthDeltaTracker extends AsteorBarHealthFixMixin {
+        void reset() {
+            beloong$resetGrowth();
+        }
+
+        float sample(int tick, float health, float maxHealth, double growth) {
+            return beloong$sampleGrowth(tick, health, maxHealth, growth);
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(floats = {1.0F, 0.5F})
     void steadyGrowthDoesNotCreateHealingNumbers(float fraction) {
